@@ -1,16 +1,15 @@
 const express = require('express');
 const path = require('path')
-const paypal = require('paypal-rest-sdk')
+const paypal = require('@paypal/checkout-server-sdk');
 let app = express();
 
 
+let CLIENT_ID = ''
+let CLIENT_SECRET = '';
+let environment = new paypal.core.SandboxEnvironment(CLIENT_ID, CLIENT_SECRET);
+let client = new paypal.core.PayPalHttpClient(environment);
 
 
-paypal.configure({
-    'mode':'sandbox',
-    'client_id':'your client_id',
-    'client_secret':'your client_secret'
-})
 
 app.use('/',express.static(path.join(__dirname, 'public')));
 
@@ -20,70 +19,48 @@ app.get('/', (req,res)=>{
 
 
 app.get('/buy',(req,res)=>{
-    // Create payment object
-    let payment = {
-        "intent":"authorize",
-        "payer":{
-            "payment_method":"paypal"
-        },
-        "redirect_urls":{
-            "return_url":"http://127.0.0.1:3000/success",
-            "cancel_url":"http://127.0.0.1:3000/err"
-        },
-        "transactions":[{
-            "amount":{
-                "total":1.00,
-                "currency":"INR"
-            },
-            "description":"Hiii SAGAR its first payment of your through paypal"
-        }]
-    }
 
-    // Call create pay method
-    createPay(payment)
-        .then((transaction)=>{
-            let id = transaction.id
-            let links = transaction.links;
-            let counter = links.length;
-            while(counter -- ){
-                if(links[counter].method == 'REDIRECT'){
-                    // redirect to paypal where user approves the transaction 
-                    return res.redirect( links[counter].href )
+    let request = new paypal.orders.OrdersCreateRequest();
+   
+    request.requestBody({
+        "intent": "CAPTURE",
+        "purchase_units": [
+            {
+                "amount": {
+                    "currency_code": "INR",
+                    "value": "1.00"
                 }
             }
+         ]
+    });
 
-        })
-        .catch( ( err ) => { 
-            console.log( err ); 
-            res.redirect('/err');
-        });
+    // Call API with your client and get a response for your call
+let createOrder  = async function(){
+    let response = await client.execute(request);
+    let something = new paypal.orders.OrdersCaptureRequest(response.result.id);
+    something.requestBody({});
+    console.log(something)
+    console.log(`Response: ${JSON.stringify(response, null, 2)}`);
+    // If call returns body in response, you can get the deserialized version from the result attribute of the response.
+   
+   res.redirect(response.result.links[0].href);
+}
+
+createOrder();
 })
 
 // success page 
 app.get('/success' , (req ,res ) => {
-    console.log(req.query); 
-    res.redirect('/success.html'); 
+console.log(" From Success ")
+ 
 })
 
 // error page 
 app.get('/err' , (req , res) => {
-    console.log(req.query); 
-    res.redirect('/err.html'); 
+    console.log(" From  Error")
+  
 })
 
-// helper functions
-var createPay = ( payment ) => {
-    return new Promise( ( resolve , reject ) => {
-        paypal.payment.create( payment , function( err , payment ) {
-         if ( err ) {
-             reject(err); 
-         }
-        else {
-            resolve(payment); 
-        }
-        }); 
-    });
-}						
 		
 
 app.listen(3000, ()=>{
